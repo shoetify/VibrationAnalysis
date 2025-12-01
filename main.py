@@ -18,6 +18,11 @@ def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
 
             # FFT compute
             freq, mag, ref = util.compute_fft(signal[start_index:end_index], 333.333)
+            freq_1_index = util.find_data_index(np.asarray(freq),1)
+            if (freq_1_index<=0) or (freq_1_index>=len(freq)):
+                raise ValueError(f"Issue found: FFT result abnormal")
+            freq = freq[freq_1_index:]
+            mag = mag[freq_1_index:]
             mag_max_index = int(np.argmax(mag))
             peak_freq = freq[mag_max_index]
             peaks_width = int((1/peak_freq) * 0.9 * SAMPLING_FREQUENCY)
