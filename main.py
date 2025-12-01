@@ -1,34 +1,17 @@
-from pathlib import Path
-
 import numpy as np
-from scipy.signal import find_peaks
-from util import main as util_main
 
-
-def load_signal_file(file_key: str) -> tuple[np.ndarray, np.ndarray, Path]:
-    """Load a two-column txt file by file_key; columns map to (time, signal)."""
-    file_name = file_key if file_key.endswith(".txt") else f"{file_key}.txt"
-    candidate = Path(file_name)
-    if not candidate.is_file():
-        matches = list(Path.cwd().rglob(file_name))
-        if not matches:
-            raise FileNotFoundError(f"Could not find data file for '{file_name}'")
-        candidate = matches[0]
-
-    data = np.loadtxt(candidate)
-    time = data[:, 0]
-    signal = data[:, 1]
-    return time, signal, candidate
+from util import load_log_data, load_signal_data
 
 
 def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    log_data = util_main()
+    log_data = load_log_data()
 
     loaded_signals: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for file_key in log_data:
-        time, signal, path = load_signal_file(file_key)
+        time, signal, path = load_signal_data(file_key)
         print(f"Loaded {path} for key '{file_key}'")
-        
+        loaded_signals[file_key] = (time, signal)
+
 
 
 

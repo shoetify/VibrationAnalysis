@@ -2,6 +2,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
+import numpy as np
+
 try:
     import pandas as pd  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
@@ -167,9 +169,24 @@ def read_log(log_path: Path | str) -> Dict[Any, Dict[Any, List[Any]]]:
     return result
 
 
-def main() -> Dict[Any, Dict[Any, List[Any]]]:
+def load_signal_data(file_key: str) -> tuple[np.ndarray, np.ndarray, Path]:
+    """Load a two-column txt file by file_key; columns map to (time, signal)."""
+    file_name = file_key if file_key.endswith(".txt") else f"{file_key}.txt"
+    candidate = Path(file_name)
+    if not candidate.is_file():
+        matches = list(Path.cwd().rglob(file_name))
+        if not matches:
+            raise FileNotFoundError(f"Could not find data file for '{file_name}'")
+        candidate = matches[0]
+
+    data = np.loadtxt(candidate)
+    time = data[:, 0]
+    signal = data[:, 1]
+    return time, signal, candidate
+
+
+def load_log_data() -> Dict[Any, Dict[Any, List[Any]]]:
     log_path = find_log_file()
     log_data = read_log(log_path)
     print(f"Loaded {log_path}")
-    #print(log_data)
     return log_data
