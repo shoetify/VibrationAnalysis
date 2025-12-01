@@ -16,20 +16,22 @@ def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
             start_index = util.find_data_index(time, logs[log][0])
             end_index = util.find_data_index(time, logs[log][1])
 
+            # Peak detection
             peaks_indices, _ = find_peaks(signal[start_index:end_index])
-            peak_times = util.find_time_index_from_peaks(
-                peaks_indices, time[start_index:end_index], signal[start_index:end_index]
-            )
+            peak_times = time[start_index:end_index][peaks_indices]
             peak_signals = signal[start_index:end_index][peaks_indices]
-
             # Save in the same two-column, tab-delimited format as the raw data.
-            np.savetxt(
-                f"{log}.txt",
-                np.column_stack((peak_times, peak_signals)),
-                delimiter="\t",
-                fmt="%.6f\t%.6f",
-            )
+            # np.savetxt(
+            #     f"{log}.txt",
+            #     np.column_stack((peak_times, peak_signals)),
+            #     delimiter="\t",
+            #     fmt="%.6f\t%.6f",
+            # )
 
+            # FFT compute
+            freq, mag, ref = util.compute_fft(signal[start_index:end_index], 333.333)
+            mag_max_index = int(np.argmax(mag))
+            peak_freq = freq[mag_max_index]
             
 
 

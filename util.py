@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -198,19 +198,25 @@ def find_data_index(time: np.ndarray, t: float) -> int:
     return idx
 
 
-def find_time_index_from_peaks(
-    peaks: np.ndarray, times: np.ndarray, signals: np.ndarray
-) -> list[float]:
-    """Return the time values corresponding to each peak index."""
-    if times.shape[0] != signals.shape[0]:
-        raise ValueError("times and signals must have the same length")
-
-    p_indices = np.atleast_1d(peaks)
-    return [float(times[int(idx)]) for idx in p_indices]
-
-
 def load_log_data() -> Dict[Any, Dict[Any, List[Any]]]:
     log_path = find_log_file()
     log_data = read_log(log_path)
     print(f"Loaded {log_path}")
     return log_data
+
+
+def compute_fft(
+    signal: Sequence[float],
+    sample_rate: float,
+) -> Tuple[Sequence[float], Sequence[float], float]:
+    array = np.asarray(signal, dtype=float)
+    if array.size == 0:
+        raise ValueError("Cannot compute FFT of an empty signal.")
+
+    fluctuations = array - np.mean(array)
+    fft_result = np.fft.rfft(fluctuations)
+    magnitude = np.abs(fft_result) ** 2
+    frequency = np.fft.rfftfreq(array.size, d=1.0 / sample_rate)
+
+    resolution = frequency[1] - frequency[0] if frequency.size > 1 else 0.0
+    return frequency.tolist(), magnitude.tolist(), float(resolution)
