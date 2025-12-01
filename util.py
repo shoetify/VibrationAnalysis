@@ -1,3 +1,4 @@
+import csv
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -220,3 +221,44 @@ def compute_fft(
 
     resolution = frequency[1] - frequency[0] if frequency.size > 1 else 0.0
     return frequency.tolist(), magnitude.tolist(), float(resolution)
+
+
+def export_result_to_csv(
+    loaded_signals: Dict[str, List[float]], file_name: str
+) -> Path:
+    """
+    Append measurement summary rows to output.csv (created if missing).
+
+    Columns: File Name, Wind Speed, Top 10% Peak Value,
+    Top 10% Bottom Value, Amplitude.
+    """
+    output_path = Path(__file__).resolve().parent / "output.csv"
+    headers = [
+        "File Name",
+        "Wind Speed",
+        "Top 10% Peak Value",
+        "Top 10% Bottom Value",
+        "Amplitude",
+    ]
+
+    rows = []
+    for wind_speed, values in loaded_signals.items():
+        if len(values) != 2:
+            raise ValueError(
+                f"Expected two values (top10_peak, bottom10_bottom) for '{wind_speed}'"
+            )
+        top_peak, bottom_bottom = values
+        amplitude = top_peak - bottom_bottom
+        rows.append(
+            [file_name, wind_speed, float(top_peak), float(bottom_bottom), amplitude]
+        )
+
+    write_header = not output_path.exists()
+    mode = "a" if output_path.exists() else "w"
+    with output_path.open(mode, newline="") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(headers)
+        writer.writerows(rows)
+
+    return output_path

@@ -6,13 +6,12 @@ SAMPLING_FREQUENCY = 333.3333
 
 def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
     log_data = util.load_log_data()
-
-    loaded_signals: dict[str, tuple[np.ndarray, np.ndarray]] = {}
-    for file_key in log_data:
+    loaded_signals: dict[str, list[float, float]] = {}
+    for file_key in log_data: # For every files inside the log
         time, signal, path = util.load_signal_data(file_key)
         print(f"Loaded {path} for key '{file_key}'")
         logs = log_data[file_key]
-        for log in logs:
+        for log in logs: # For Every Wind Speed inside the files 
             start_index = util.find_data_index(time, logs[log][0])
             end_index = util.find_data_index(time, logs[log][1])
 
@@ -29,16 +28,32 @@ def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
             
             # Peak detection
             peaks_indices, _ = find_peaks(signal[start_index:end_index], distance=peaks_width)
-            peak_times = time[start_index:end_index][peaks_indices]
-            peak_signals = signal[start_index:end_index][peaks_indices]
-            # Save in the same two-column, tab-delimited format as the raw data.
-            np.savetxt(
-                f"{log}.txt",
-                np.column_stack((peak_times, peak_signals)),
-                delimiter="\t",
-                fmt="%.6f\t%.6f",
-            )
+            bottoms_indices, _ = find_peaks(-signal[start_index:end_index], distance=peaks_width)
+            
+            # Extract peak and bottom values
+            peaks_values = np.array(signal[start_index:end_index][peaks_indices].tolist())
+            bottoms_values = np.array(signal[start_index:end_index][bottoms_indices].tolist())
 
+            # Sort the values
+            sorted_peaks = np.sort(peaks_values)
+            sorted_bottoms = np.sort(bottoms_values)
+
+            # Calculate 10% count
+            top_n = max(1, int(0.1 * len(sorted_peaks)))
+            bottom_n = max(1, int(0.1 * len(sorted_bottoms)))
+
+            # Get top and bottom 10% values
+            top_10_percent_peaks = sorted_peaks[-top_n:]
+            bottom_10_percent_bottoms = sorted_bottoms[:bottom_n]
+
+            # Calculate averages
+            avg_top_10_peaks = np.mean(top_10_percent_peaks)
+            avg_bottom_10_bottoms = np.mean(bottom_10_percent_bottoms)
+
+            # Store result into a map
+            loaded_signals[log] = [avg_top_10_peaks, avg_bottom_10_bottoms]
+            
+        util.export_result_to_csv(loaded_signals, file_key)
 
 
 if __name__ == "__main__":
