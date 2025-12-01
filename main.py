@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.signal import find_peaks
-
 import util
 
+SAMPLING_FREQUENCY = 333.3333
 
 def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
     log_data = util.load_log_data()
@@ -16,23 +16,23 @@ def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
             start_index = util.find_data_index(time, logs[log][0])
             end_index = util.find_data_index(time, logs[log][1])
 
-            # Peak detection
-            peaks_indices, _ = find_peaks(signal[start_index:end_index])
-            peak_times = time[start_index:end_index][peaks_indices]
-            peak_signals = signal[start_index:end_index][peaks_indices]
-            # Save in the same two-column, tab-delimited format as the raw data.
-            # np.savetxt(
-            #     f"{log}.txt",
-            #     np.column_stack((peak_times, peak_signals)),
-            #     delimiter="\t",
-            #     fmt="%.6f\t%.6f",
-            # )
-
             # FFT compute
             freq, mag, ref = util.compute_fft(signal[start_index:end_index], 333.333)
             mag_max_index = int(np.argmax(mag))
             peak_freq = freq[mag_max_index]
+            peaks_width = int((1/peak_freq) * 0.9 * SAMPLING_FREQUENCY)
             
+            # Peak detection
+            peaks_indices, _ = find_peaks(signal[start_index:end_index], distance=peaks_width)
+            peak_times = time[start_index:end_index][peaks_indices]
+            peak_signals = signal[start_index:end_index][peaks_indices]
+            # Save in the same two-column, tab-delimited format as the raw data.
+            np.savetxt(
+                f"{log}.txt",
+                np.column_stack((peak_times, peak_signals)),
+                delimiter="\t",
+                fmt="%.6f\t%.6f",
+            )
 
 
 
