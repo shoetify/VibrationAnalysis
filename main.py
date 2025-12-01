@@ -1,18 +1,36 @@
 import numpy as np
+from scipy.signal import find_peaks
 
-from util import load_log_data, load_signal_data
+import util
 
 
 def main() -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    log_data = load_log_data()
+    log_data = util.load_log_data()
 
     loaded_signals: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for file_key in log_data:
-        time, signal, path = load_signal_data(file_key)
+        time, signal, path = util.load_signal_data(file_key)
         print(f"Loaded {path} for key '{file_key}'")
-        loaded_signals[file_key] = (time, signal)
+        logs = log_data[file_key]
+        for log in logs:
+            start_index = util.find_data_index(time, logs[log][0])
+            end_index = util.find_data_index(time, logs[log][1])
 
+            peaks_indices, _ = find_peaks(signal[start_index:end_index])
+            peak_times = util.find_time_index_from_peaks(
+                peaks_indices, time[start_index:end_index], signal[start_index:end_index]
+            )
+            peak_signals = signal[start_index:end_index][peaks_indices]
 
+            # Save in the same two-column, tab-delimited format as the raw data.
+            np.savetxt(
+                f"{log}.txt",
+                np.column_stack((peak_times, peak_signals)),
+                delimiter="\t",
+                fmt="%.6f\t%.6f",
+            )
+
+            
 
 
 

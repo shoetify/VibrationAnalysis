@@ -185,6 +185,30 @@ def load_signal_data(file_key: str) -> tuple[np.ndarray, np.ndarray, Path]:
     return time, signal, candidate
 
 
+def find_data_index(time: np.ndarray, t: float) -> int:
+    """
+    Return the index of the first element in `time` that occurs after `t`.
+
+    Assumes `time` is sorted in ascending order. Raises ValueError if no
+    element is greater than `t`.
+    """
+    idx = int(np.searchsorted(time, t, side="right"))
+    if idx >= time.size:
+        raise ValueError(f"Time {t} exceeds available range (max {time.max()})")
+    return idx
+
+
+def find_time_index_from_peaks(
+    peaks: np.ndarray, times: np.ndarray, signals: np.ndarray
+) -> list[float]:
+    """Return the time values corresponding to each peak index."""
+    if times.shape[0] != signals.shape[0]:
+        raise ValueError("times and signals must have the same length")
+
+    p_indices = np.atleast_1d(peaks)
+    return [float(times[int(idx)]) for idx in p_indices]
+
+
 def load_log_data() -> Dict[Any, Dict[Any, List[Any]]]:
     log_path = find_log_file()
     log_data = read_log(log_path)
