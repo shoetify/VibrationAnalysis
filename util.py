@@ -172,12 +172,16 @@ def read_log(log_path: Path | str) -> Dict[Any, Dict[Any, List[Any]]]:
 
 def load_signal_data(
     file_key: str, data_structure: Sequence[int]
-) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray], Path]:
+) -> tuple[np.ndarray, list[tuple[int, np.ndarray]], list[tuple[int, np.ndarray]], Path]:
     """
     Load a txt file by file_key and map its columns according to data_structure.
 
     data_structure defines the semantic meaning of each column index:
         1 -> time, 2 -> displacement, 3 -> acceleration, 0 -> ignore.
+
+    Returns:
+        time series, displacement columns (col_index, data), acceleration columns (col_index, data), path.
+        col_index is 1-based to match human-friendly column numbering.
     """
     file_name = file_key if file_key.endswith(".txt") else f"{file_key}.txt"
     candidate = Path(file_name)
@@ -196,8 +200,8 @@ def load_signal_data(
         )
 
     time: Optional[np.ndarray] = None
-    displacements: list[np.ndarray] = []
-    accelerations: list[np.ndarray] = []
+    displacements: list[tuple[int, np.ndarray]] = []
+    accelerations: list[tuple[int, np.ndarray]] = []
 
     for col_idx, marker in enumerate(data_structure):
         column = data[:, col_idx]
@@ -206,9 +210,9 @@ def load_signal_data(
         if marker == 1:
             time = column
         elif marker == 2:
-            displacements.append(column)
+            displacements.append((col_idx + 1, column))
         elif marker == 3:
-            accelerations.append(column)
+            accelerations.append((col_idx + 1, column))
         else:
             raise ValueError(f"Unsupported DATA_STRUCTURE marker '{marker}' at position {col_idx}")
 
@@ -256,7 +260,7 @@ def compute_fft(
 
 
 def export_result_to_csv(
-    loaded_signals: Dict[str, List[float]], file_name: str
+    loaded_signals: Dict[str, List[float]], file_name: str, output_filename: str = "output.csv"
 ) -> Path:
     """
     Append measurement summary rows to output.csv (created if missing).
@@ -264,7 +268,7 @@ def export_result_to_csv(
     Columns: File Name, Wind Speed, Top 10% Peak Value,
     Top 10% Bottom Value, Amplitude.
     """
-    output_path = Path(__file__).resolve().parent / "output.csv"
+    output_path = Path(__file__).resolve().parent / output_filename
     headers = [
         "File Name",
         "Wind Speed",

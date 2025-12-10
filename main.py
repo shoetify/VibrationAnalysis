@@ -22,7 +22,8 @@ def acceleration_to_displacement(acceleration: np.ndarray) -> np.ndarray:
     filtered_speed = high_pass_filter(speed, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
 
     displacement = np.cumsum(filtered_speed) * dt
-    return high_pass_filter(displacement, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
+    displacement_mm = displacement * 1000.0  # convert m to mm to match displacement units
+    return high_pass_filter(displacement_mm, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
 
 
 def analyze_displacement(signal: np.ndarray, start_index: int, end_index: int) -> tuple[float, float]:
@@ -65,9 +66,9 @@ def analyze_displacement(signal: np.ndarray, start_index: int, end_index: int) -
     return avg_top_10_peaks, avg_bottom_10_bottoms
 
 
-def main() -> dict[str, list[float]]:
+def main() -> dict[str, dict[str, list[float]]]:
     log_data = util.load_log_data()
-    loaded_signals: dict[str, list[float]] = {}
+    all_results: dict[str, dict[str, list[float]]] = {}
 
     for file_key in log_data:  # For every file inside the log
         time, displacement_columns, acceleration_columns, path = util.load_signal_data(
@@ -75,30 +76,39 @@ def main() -> dict[str, list[float]]:
         )
         print(f"Loaded {path} for key '{file_key}'")
 
-        displacement_series: list[tuple[str, np.ndarray]] = []
-        for idx, displacement in enumerate(displacement_columns, start=1):
-            displacement_series.append((f"disp_c{idx}", displacement))
-        for idx, acceleration in enumerate(acceleration_columns, start=1):
-            displacement_series.append((f"acc_c{idx}_disp", acceleration_to_displacement(acceleration)))
+        displacement_series: list[tuple[str, int, np.ndarray]] = []
+        for col_number, displacement in displacement_columns:
+            displacement_series.append(("disp", col_number, displacement))
+        for col_number, acceleration in acceleration_columns:
+            displacement_series.append(
+                ("acce", col_number, acceleration_to_displacement(acceleration))
+            )
 
         if not displacement_series:
             raise ValueError("No displacement or acceleration columns found based on DATA_STRUCTURE.")
 
+        column_results: dict[tuple[str, int], dict[str, list[float]]] = {}
         logs = log_data[file_key]
         for log in logs:  # For every wind speed inside the files
             start_index = util.find_data_index(time, logs[log][0])
             end_index = util.find_data_index(time, logs[log][1])
 
-            for label, signal in displacement_series:
+            for kind, col_number, signal in displacement_series:
                 avg_top_10_peaks, avg_bottom_10_bottoms = analyze_displacement(
                     signal, start_index, end_index
                 )
-                result_key = log if len(displacement_series) == 1 else f"{log}_{label}"
-                loaded_signals[result_key] = [avg_top_10_peaks, avg_bottom_10_bottoms]
+                key = (kind, col_number)
+                per_column = column_results.setdefault(key, {})
+                per_column[log] = [avg_top_10_peaks, avg_bottom_10_bottoms]
 
-        util.export_result_to_csv(loaded_signals, file_key)
+        for (kind, col_number), results in column_results.items():
+            output_filename = (
+                f"output_disp_{col_number}.csv" if kind == "disp" else f"output_acce_{col_number}.csv"
+            )
+            util.export_result_to_csv(results, file_key, output_filename)
+            all_results[f"{file_key}_{kind}_{col_number}"] = results
 
-    return loaded_signals
+    return all_results
 
 
 if __name__ == "__main__":
