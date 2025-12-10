@@ -170,8 +170,15 @@ def read_log(log_path: Path | str) -> Dict[Any, Dict[Any, List[Any]]]:
     return result
 
 
-def load_signal_data(file_key: str) -> tuple[np.ndarray, np.ndarray, Path]:
-    """Load a two-column txt file by file_key; columns map to (time, signal)."""
+def load_signal_data(
+    file_key: str, data_structure: Sequence[int]
+) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray], Path]:
+    """
+    Load a txt file by file_key and map its columns according to data_structure.
+
+    data_structure defines the semantic meaning of each column index:
+        1 -> time, 2 -> displacement, 3 -> acceleration, 0 -> ignore.
+    """
     file_name = file_key if file_key.endswith(".txt") else f"{file_key}.txt"
     candidate = Path(file_name)
     if not candidate.is_file():
@@ -181,9 +188,34 @@ def load_signal_data(file_key: str) -> tuple[np.ndarray, np.ndarray, Path]:
         candidate = matches[0]
 
     data = np.loadtxt(candidate)
-    time = data[:, 0]
-    signal = data[:, 1]
-    return time, signal, candidate
+    if data.ndim != 2:
+        raise ValueError(f"Expected 2D data from {candidate}, got shape {data.shape}")
+    if data.shape[1] < len(data_structure):
+        raise ValueError(
+            f"DATA_STRUCTURE expects {len(data_structure)} columns but {candidate} has {data.shape[1]}"
+        )
+
+    time: Optional[np.ndarray] = None
+    displacements: list[np.ndarray] = []
+    accelerations: list[np.ndarray] = []
+
+    for col_idx, marker in enumerate(data_structure):
+        column = data[:, col_idx]
+        if marker == 0:
+            continue
+        if marker == 1:
+            time = column
+        elif marker == 2:
+            displacements.append(column)
+        elif marker == 3:
+            accelerations.append(column)
+        else:
+            raise ValueError(f"Unsupported DATA_STRUCTURE marker '{marker}' at position {col_idx}")
+
+    if time is None:
+        raise ValueError("No time column defined by DATA_STRUCTURE")
+
+    return time, displacements, accelerations, candidate
 
 
 def find_data_index(time: np.ndarray, t: float) -> int:
