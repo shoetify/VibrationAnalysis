@@ -35,15 +35,17 @@ DARK_THEME_QSS = """
         font-size: 10pt;
     }
     QLabel#TitleLabel {
-        font-size: 14pt;
+        font-size: 12pt;
         font-weight: bold;
         color: #ffffff;
-        margin-bottom: 5px;
+        margin-bottom: 0px;
+        padding: 0 5px;
     }
     QLabel#SubtitleLabel {
         font-size: 10pt;
         color: #aaaaaa;
         margin-bottom: 20px;
+        padding: 0 5px;
     }
 
     /* Inputs */
@@ -263,18 +265,29 @@ class MainWindow(QMainWindow):
             self.logo_label.setPixmap(pixmap.scaledToHeight(80, Qt.SmoothTransformation))
         self.logo_label.setAlignment(Qt.AlignCenter)
         
-        self.title_label = QLabel("TM Lab")
-        self.title_label.setObjectName("TitleLabel")
-        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label = QLabel("Supervisor: Tongming Zhou")
+        self.title_label.setObjectName("SubtitleLabel")
+        self.title_label.setAlignment(Qt.AlignLeft)
+        self.title_label.setWordWrap(True)
         
-        self.subtitle_label = QLabel("Wind Tunnel Lab")
+        self.subtitle_label = QLabel("Supported email:\ndifei.xiao@research.uwa.edu.au")
         self.subtitle_label.setObjectName("SubtitleLabel")
-        self.subtitle_label.setAlignment(Qt.AlignCenter)
+        self.subtitle_label.setAlignment(Qt.AlignLeft)
+        self.subtitle_label.setWordWrap(True)
 
         sidebar_layout.addWidget(self.logo_label)
-        sidebar_layout.addWidget(self.title_label)
-        sidebar_layout.addWidget(self.subtitle_label)
-
+        
+        # Info Group (to remove gap between title and subtitle)
+        info_container = QWidget()
+        info_layout = QVBoxLayout(info_container)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(0)
+        
+        info_layout.addWidget(self.title_label)
+        info_layout.addWidget(self.subtitle_label)
+        
+        sidebar_layout.addWidget(info_container)
+ 
         # Inputs
         settings_group = QGroupBox("Configuration")
         settings_layout = QFormLayout(settings_group)
