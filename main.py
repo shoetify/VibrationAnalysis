@@ -1,115 +1,325 @@
-import numpy as np
-from scipy.signal import butter, filtfilt, find_peaks
-import util
+# -*- coding: utf-8 -*-
+import sys
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QVBoxLayout, QWidget,
+    QPushButton, QTextEdit, QStatusBar, QProgressBar,
+    QHBoxLayout, QLabel, QFileDialog, QLineEdit, QFormLayout, QGroupBox
+)
+from PySide6.QtCore import QThread, QObject, Signal, Slot, Qt
+from PySide6.QtGui import QIcon, QPixmap
 
-SAMPLING_FREQUENCY = 333.3333
-CUTOFF_FREQUENCY_HZ = 0.5
-DATA_STRUCTURE = [1, 2, 3, 3, 3, 0, 0, 0, 0]
+import logic
+
+# --- Constants for UI ---
+APP_TITLE = "Vibration Analysis Tool"
+WINDOW_ICON_PATH = "LOGO.png"  # Path to the icon file
+DEFAULT_WINDOW_SIZE = (800, 700) # Increased height for new fields
+
+# --- QSS Dark Theme (Material Design Inspired) ---
+DARK_THEME_QSS = """
+    QMainWindow {
+        background-color: #2b2b2b;
+    }
+    QWidget {
+        background-color: #3c3c3c;
+        color: #f0f0f0;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 10pt;
+    }
+    QLabel#LogoLabel {
+        background-color: transparent;
+        padding: 10px;
+    }
+    QLabel {
+        font-size: 10pt;
+        font-weight: bold;
+    }
+    QGroupBox {
+        font-size: 12pt;
+        font-weight: bold;
+        border: 1px solid #555;
+        border-radius: 8px;
+        padding-top: 20px; /* Provides space for the title inside the border */
+        margin-top: 10px;
+        background-color: #3c3c3c;
+    }
+    QGroupBox::title {
+        subcontrol-origin: padding;
+        subcontrol-position: top left;
+        padding: 0 10px;
+        left: 10px; /* Indent the title from the left edge */
+        color: #f0f0f0;
+    }
+    QTextEdit {
+        background-color: #2b2b2b;
+        border: 1px solid #555;
+        border-radius: 8px;
+        font-family: 'Consolas', 'Courier New', monospace;
+        padding: 5px;
+    }
+    QLineEdit {
+        background-color: #2b2b2b;
+        border: 1px solid #555;
+        padding: 6px;
+        border-radius: 4px;
+    }
+    QLineEdit:focus {
+        border: 1px solid #0078d7;
+    }
+    QPushButton {
+        background-color: #0078d7;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    QPushButton:hover {
+        background-color: #005a9e;
+    }
+    QPushButton:pressed {
+        background-color: #004578;
+    }
+    QPushButton:disabled {
+        background-color: #484848;
+        color: #888;
+    }
+    QProgressBar {
+        border: 1px solid #555;
+        border-radius: 5px;
+        text-align: center;
+        background-color: #2b2b2b;
+        color: white;
+    }
+    QProgressBar::chunk {
+        background-color: #0078d7;
+        border-radius: 4px;
+    }
+    QStatusBar {
+        font-size: 9pt;
+    }
+"""
+
+class Worker(QObject):
+    """
+    A worker object that runs a long task in a separate thread.
+    Emits signals to communicate with the main UI thread.
+    """
+    progress = Signal(str)
+    finished = Signal(bool)  # Indicates success or failure
+    error = Signal(str)
+
+    def __init__(
+        self,
+        log_file_path: str,
+        sampling_frequency: float,
+        cutoff_frequency: float,
+        data_structure: list[int]
+    ):
+        super().__init__()
+        self.log_file_path = log_file_path
+        self.sampling_frequency = sampling_frequency
+        self.cutoff_frequency = cutoff_frequency
+        self.data_structure = data_structure
+
+    @Slot()
+    def run(self):
+        """Execute the analysis logic."""
+        try:
+            analysis_generator = logic.run_analysis(
+                log_file_path=self.log_file_path,
+                sampling_frequency=self.sampling_frequency,
+                cutoff_frequency_hz=self.cutoff_frequency,
+                data_structure=self.data_structure,
+            )
+            for status_message in analysis_generator:
+                self.progress.emit(status_message)
+            self.finished.emit(True)
+        except Exception as e:
+            # Emit both error and finished signals on exception
+            self.error.emit(str(e))
+            self.finished.emit(False)
 
 
-def high_pass_filter(signal: np.ndarray, cutoff_hz: float, sample_rate: float, order: int = 6) -> np.ndarray:
-    nyquist = sample_rate / 2.0
-    b, a = butter(order, cutoff_hz / nyquist, btype="highpass")
-    return filtfilt(b, a, np.asarray(signal, dtype=float))
+class MainWindow(QMainWindow):
+    """Main application window."""
 
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(APP_TITLE)
+        if WINDOW_ICON_PATH:
+            self.setWindowIcon(QIcon(WINDOW_ICON_PATH))
+        self.resize(*DEFAULT_WINDOW_SIZE)
 
-def acceleration_to_displacement(acceleration: np.ndarray) -> np.ndarray:
-    """Convert acceleration data to displacement using chained high-pass filters and integration."""
-    filtered_acc = high_pass_filter(acceleration, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
-    dt = 1.0 / SAMPLING_FREQUENCY
+        # --- UI Components ---
+        self.logo_label = QLabel()
+        self.logo_label.setObjectName("LogoLabel")
+        pixmap = QPixmap(WINDOW_ICON_PATH)
+        if not pixmap.isNull():
+            self.logo_label.setPixmap(pixmap.scaledToHeight(80, Qt.SmoothTransformation))
+            self.logo_label.setAlignment(Qt.AlignCenter)
+        
+        self.log_area = QTextEdit()
+        self.log_area.setReadOnly(True)
 
-    speed = np.cumsum(filtered_acc) * dt
-    filtered_speed = high_pass_filter(speed, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
+        self.run_button = QPushButton("Run Analysis")
+        self.select_log_button = QPushButton("Select Log File")
+        self.log_file_label = QLabel("No log file selected.")
+        self.log_file_label.setStyleSheet("font-size: 9pt; font-weight: normal; color: #bbb;")
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
 
-    displacement = np.cumsum(filtered_speed) * dt
-    displacement_mm = displacement * 1000.0  # convert m to mm to match displacement units
-    return high_pass_filter(displacement_mm, CUTOFF_FREQUENCY_HZ, SAMPLING_FREQUENCY)
+        # --- Settings Inputs ---
+        self.sampling_freq_input = QLineEdit(str(logic.DEFAULT_SAMPLING_FREQUENCY))
+        self.cutoff_freq_input = QLineEdit(str(logic.DEFAULT_CUTOFF_FREQUENCY_HZ))
+        self.data_structure_input = QLineEdit(', '.join(map(str, logic.DEFAULT_DATA_STRUCTURE)))
 
+        # --- Layout ---
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        
+        main_layout.addWidget(self.logo_label)
 
-def analyze_displacement(signal: np.ndarray, start_index: int, end_index: int) -> tuple[float, float]:
-    """Compute peak and bottom metrics for the specified segment of a displacement signal."""
-    segment = np.asarray(signal[start_index:end_index], dtype=float)
-    if segment.size == 0:
-        raise ValueError("Selected signal segment is empty.")
+        # --- Settings Group ---
+        settings_group = QGroupBox("Analysis Settings")
+        settings_layout = QFormLayout(settings_group)
+        settings_layout.addRow(QLabel("Sampling Frequency (Hz):"), self.sampling_freq_input)
+        settings_layout.addRow(QLabel("Cutoff Frequency (Hz):"), self.cutoff_freq_input)
+        settings_layout.addRow(QLabel("Data Structure:"), self.data_structure_input)
+        main_layout.addWidget(settings_group)
 
-    freq, mag, _ = util.compute_fft(segment, SAMPLING_FREQUENCY)
-    freq_1_index = util.find_data_index(np.asarray(freq, dtype=float), 1)
-    if (freq_1_index <= 0) or (freq_1_index >= len(freq)):
-        raise ValueError("Issue found: FFT result abnormal")
+        # --- File & Controls Group ---
+        controls_group = QGroupBox("File & Execution")
+        controls_layout = QVBoxLayout(controls_group)
 
-    freq = freq[freq_1_index:]
-    mag = mag[freq_1_index:]
-    mag_max_index = int(np.argmax(mag))
-    peak_freq = freq[mag_max_index]
-    peaks_width = max(1, int((1 / peak_freq) * 0.9 * SAMPLING_FREQUENCY))
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(self.select_log_button)
+        file_layout.addWidget(self.log_file_label)
+        file_layout.addStretch()
+        
+        controls_layout.addLayout(file_layout)
+        controls_layout.addWidget(self.run_button)
 
-    peaks_indices, _ = find_peaks(segment, distance=peaks_width)
-    bottoms_indices, _ = find_peaks(-segment, distance=peaks_width)
-    if peaks_indices.size == 0 or bottoms_indices.size == 0:
-        raise ValueError("No peaks detected in the selected segment.")
+        main_layout.addWidget(controls_group)
 
-    peaks_values = segment[peaks_indices]
-    bottoms_values = segment[bottoms_indices]
+        # --- Log Area ---
+        log_group = QGroupBox("Analysis Log")
+        log_layout = QVBoxLayout(log_group)
+        log_layout.addWidget(self.log_area)
+        main_layout.addWidget(log_group, 1) # Give log area stretch factor
 
-    sorted_peaks = np.sort(peaks_values)
-    sorted_bottoms = np.sort(bottoms_values)
+        # --- Status Bar ---
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.addPermanentWidget(self.progress_bar, 1)
 
-    top_n = max(1, int(0.1 * len(sorted_peaks)))
-    bottom_n = max(1, int(0.1 * len(sorted_bottoms)))
+        # --- Connections ---
+        self.run_button.clicked.connect(self.start_analysis)
+        self.select_log_button.clicked.connect(self.select_log_file)
+        
+        self.thread = None
+        self.worker = None
+        self.selected_log_file = None
 
-    top_10_percent_peaks = sorted_peaks[-top_n:]
-    bottom_10_percent_bottoms = sorted_bottoms[:bottom_n]
-
-    avg_top_10_peaks = np.mean(top_10_percent_peaks)
-    avg_bottom_10_bottoms = np.mean(bottom_10_percent_bottoms)
-
-    return avg_top_10_peaks, avg_bottom_10_bottoms
-
-
-def main() -> dict[str, dict[str, list[float]]]:
-    log_data = util.load_log_data()
-    all_results: dict[str, dict[str, list[float]]] = {}
-
-    for file_key in log_data:  # For every file inside the log
-        time, displacement_columns, acceleration_columns, path = util.load_signal_data(
-            file_key, DATA_STRUCTURE
+    def select_log_file(self):
+        """Open a file dialog to select the log.xlsx file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Log File", "", "Excel Files (*.xlsx)"
         )
-        print(f"Loaded {path} for key '{file_key}'")
+        if file_path:
+            self.selected_log_file = file_path
+            self.log_file_label.setText(f"Using: {Path(file_path).name}")
+            self.log_file_label.setStyleSheet("font-size: 9pt; font-weight: normal; color: #90ee90;") # Light green
 
-        displacement_series: list[tuple[str, int, np.ndarray]] = []
-        for col_number, displacement in displacement_columns:
-            displacement_series.append(("disp", col_number, displacement))
-        for col_number, acceleration in acceleration_columns:
-            displacement_series.append(
-                ("acce", col_number, acceleration_to_displacement(acceleration))
-            )
+    def start_analysis(self):
+        """Prepare and start the worker thread for analysis."""
+        self.log_area.clear()
+        
+        # --- Parameter Validation ---
+        try:
+            sampling_freq = float(self.sampling_freq_input.text())
+            cutoff_freq = float(self.cutoff_freq_input.text())
+            
+            data_structure_str = self.data_structure_input.text()
+            data_structure = [int(x.strip()) for x in data_structure_str.split(',')]
+            
+            if not all(isinstance(i, int) for i in data_structure):
+                raise ValueError("Data structure must contain only integers.")
 
-        if not displacement_series:
-            raise ValueError("No displacement or acceleration columns found based on DATA_STRUCTURE.")
+        except ValueError as e:
+            self.log_area.setText(f"ERROR: Invalid input parameter.\n- Frequencies must be numbers.\n- Data structure must be a comma-separated list of integers (e.g., 1, 2, 3, 0).\nDetails: {e}")
+            self.status_bar.showMessage("Invalid settings. Please correct them.", 5000)
+            return
+            
+        self.log_area.append("Starting analysis...")
+        self.run_button.setEnabled(False)
+        self.select_log_button.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0) # Indeterminate progress bar
 
-        column_results: dict[tuple[str, int], dict[str, list[float]]] = {}
-        logs = log_data[file_key]
-        for log in logs:  # For every wind speed inside the files
-            start_index = util.find_data_index(time, logs[log][0])
-            end_index = util.find_data_index(time, logs[log][1])
+        # Create and start the thread
+        self.thread = QThread()
+        self.worker = Worker(
+            log_file_path=self.selected_log_file,
+            sampling_frequency=sampling_freq,
+            cutoff_frequency=cutoff_freq,
+            data_structure=data_structure
+        )
+        self.worker.moveToThread(self.thread)
 
-            for kind, col_number, signal in displacement_series:
-                avg_top_10_peaks, avg_bottom_10_bottoms = analyze_displacement(
-                    signal, start_index, end_index
-                )
-                key = (kind, col_number)
-                per_column = column_results.setdefault(key, {})
-                per_column[log] = [avg_top_10_peaks, avg_bottom_10_bottoms]
+        # Connect worker signals to main thread slots
+        self.worker.progress.connect(self.update_log)
+        self.worker.finished.connect(self.on_analysis_finished)
+        self.worker.error.connect(self.on_analysis_error)
+        
+        self.thread.started.connect(self.worker.run)
+        self.thread.start()
 
-        for (kind, col_number), results in column_results.items():
-            output_filename = (
-                f"output_disp_{col_number}.csv" if kind == "disp" else f"output_acce_{col_number}.csv"
-            )
-            util.export_result_to_csv(results, file_key, output_filename)
-            all_results[f"{file_key}_{kind}_{col_number}"] = results
+    @Slot(str)
+    def update_log(self, message: str):
+        """Append a message to the log area."""
+        self.log_area.append(message)
+        if "ERROR" in message:
+            self.status_bar.showMessage(f"Error occurred. Check log.", 5000)
+        else:
+            self.status_bar.showMessage(message, 3000)
 
-    return all_results
+    @Slot(str)
+    def on_analysis_error(self, error_message: str):
+        """Show an error message."""
+        self.log_area.append(f"--- FATAL ERROR ---\n{error_message}\n--------------------")
+
+
+    @Slot(bool)
+    def on_analysis_finished(self, success: bool):
+        """Clean up after the analysis is complete."""
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 100) # Reset
+        self.run_button.setEnabled(True)
+        self.select_log_button.setEnabled(True)
+        
+        if success:
+            self.log_area.append("\nAnalysis completed successfully!")
+            self.status_bar.showMessage("Analysis completed successfully!", 5000)
+        else:
+            self.log_area.append("\nAnalysis failed. See log for details.")
+            self.status_bar.showMessage("Analysis failed. See log for details.", 5000)
+        
+        # Clean up the thread
+        if self.thread:
+            self.thread.quit()
+            self.thread.wait()
+            self.thread = None
+            self.worker = None
 
 
 if __name__ == "__main__":
-    main()
+    # Add Path to the imports
+    from pathlib import Path
+    app = QApplication(sys.argv)
+    app.setStyleSheet(DARK_THEME_QSS)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
