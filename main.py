@@ -170,11 +170,12 @@ class Worker(QObject):
     finished = Signal(bool)
     error = Signal(str)
 
-    def __init__(self, log_file_path, sampling_frequency, cutoff_frequency, data_structure):
+    def __init__(self, log_file_path, sampling_frequency, diameter, natural_frequency, data_structure):
         super().__init__()
         self.log_file_path = log_file_path
         self.sampling_frequency = sampling_frequency
-        self.cutoff_frequency = cutoff_frequency
+        self.diameter = diameter
+        self.natural_frequency = natural_frequency
         self.data_structure = data_structure
 
     @Slot()
@@ -183,8 +184,9 @@ class Worker(QObject):
             analysis_generator = logic.run_analysis(
                 log_file_path=self.log_file_path,
                 sampling_frequency=self.sampling_frequency,
-                cutoff_frequency_hz=self.cutoff_frequency,
                 data_structure=self.data_structure,
+                diameter=self.diameter,
+                natural_frequency=self.natural_frequency
             )
             for status_message in analysis_generator:
                 self.progress.emit(status_message)
@@ -266,7 +268,7 @@ class MainWindow(QMainWindow):
         self.logo_label.setAlignment(Qt.AlignCenter)
         
         self.title_label = QLabel("Supervisor: Tongming Zhou")
-        self.title_label.setObjectName("SubtitleLabel")
+        self.title_label.setObjectName("TitleLabel")
         self.title_label.setAlignment(Qt.AlignLeft)
         self.title_label.setWordWrap(True)
         
@@ -295,11 +297,15 @@ class MainWindow(QMainWindow):
         settings_layout.setVerticalSpacing(15)
 
         self.sampling_freq_input = QLineEdit(str(logic.DEFAULT_SAMPLING_FREQUENCY))
-        self.cutoff_freq_input = QLineEdit(str(logic.DEFAULT_CUTOFF_FREQUENCY_HZ))
+        # New Inputs
+        self.diameter_input = QLineEdit(str(logic.DEFAULT_DIAMETER))
+        self.natural_freq_input = QLineEdit(str(logic.DEFAULT_NATURAL_FREQUENCY))
+        
         self.data_structure_input = QLineEdit(', '.join(map(str, logic.DEFAULT_DATA_STRUCTURE)))
 
         settings_layout.addRow(QLabel("Sampling Freq (Hz):"), self.sampling_freq_input)
-        settings_layout.addRow(QLabel("Cutoff Freq (Hz):"), self.cutoff_freq_input)
+        settings_layout.addRow(QLabel("Diameter:"), self.diameter_input)
+        settings_layout.addRow(QLabel("Natural Freq (Hz):"), self.natural_freq_input)
         settings_layout.addRow(QLabel("Data Structure:"), self.data_structure_input)
         
         # Helper text for structure
@@ -312,7 +318,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch() # Push everything up
 
         # Version/Footer
-        version_label = QLabel("v1.2.0")
+        version_label = QLabel("v1.3.0")
         version_label.setStyleSheet("color: #555; font-size: 8pt;")
         version_label.setAlignment(Qt.AlignCenter)
         sidebar_layout.addWidget(version_label)
@@ -383,7 +389,9 @@ class MainWindow(QMainWindow):
         # --- Parameter Validation ---
         try:
             sampling_freq = float(self.sampling_freq_input.text())
-            cutoff_freq = float(self.cutoff_freq_input.text())
+            # Read new inputs
+            diameter = float(self.diameter_input.text())
+            natural_freq = float(self.natural_freq_input.text())
             
             data_structure_str = self.data_structure_input.text()
             data_structure = [int(x.strip()) for x in data_structure_str.split(',')]
@@ -406,7 +414,8 @@ class MainWindow(QMainWindow):
         self.worker = Worker(
             log_file_path=self.selected_log_file,
             sampling_frequency=sampling_freq,
-            cutoff_frequency=cutoff_freq,
+            diameter=diameter,
+            natural_frequency=natural_freq,
             data_structure=data_structure
         )
         self.worker.moveToThread(self.thread)

@@ -18,8 +18,11 @@ except ImportError:
 
 # --- Constants ---
 DEFAULT_SAMPLING_FREQUENCY = 333.3333
-DEFAULT_CUTOFF_FREQUENCY_HZ = 0.5
+# DEFAULT_CUTOFF_FREQUENCY_HZ was removed per user request. 
+# A hardcoded value (e.g. 0.5) is used internally where filtering is strictly required.
 DEFAULT_DATA_STRUCTURE = [1, 2, 3, 3, 3, 0, 0, 0, 0]
+DEFAULT_DIAMETER = 60
+DEFAULT_NATURAL_FREQUENCY = 8
 
 COLUMN_ALIASES: dict[str, List[str]] = {
     "wind_speed": [
@@ -216,18 +219,53 @@ def compute_fft(
 
 
 def export_result_to_csv(
-    loaded_signals: Dict[str, List[float]], file_name: str, output_filename: str
+    loaded_signals: Dict[str, List[float]], 
+    file_name: str, 
+    output_filename: str,
+    diameter: float,
+    natural_frequency: float
 ) -> Path:
     output_path = Path.cwd() / output_filename
-    headers = ["File Name", "Wind Speed", "Top 10% Peak Value", "Top 10% Bottom Value", "Amplitude"]
+    headers = [
+        "File Name", 
+        "Wind Speed", 
+        "Top 10% Peak Value", 
+        "Top 10% Bottom Value", 
+        "Amplitude",
+        "A*",
+        "Ur"
+    ]
 
     rows = []
     for wind_speed, values in loaded_signals.items():
         if len(values) != 2:
             raise ValueError(f"Expected two values for '{wind_speed}'")
         top_peak, bottom_bottom = values
-        amplitude = top_peak - bottom_bottom
-        rows.append([file_name, wind_speed, float(top_peak), float(bottom_bottom), amplitude])
+        amplitude = float(top_peak) - float(bottom_bottom)
+        
+        # Parse Wind Speed for calculation
+        try:
+            ws_val = float(str(wind_speed).replace("m/s", "").strip())
+        except (ValueError, TypeError):
+            # Fallback if wind_speed is not numeric (though expected to be numeric per logic)
+            ws_val = 0.0
+
+        # Calculations
+        # A* = Amplitude / diameter / 2
+        # Ur = Wind Speed / diameter / natural_frequency
+        ws_val = ws_val * 0.1726 - 0.06956
+        a_star = amplitude / diameter / 2.0 if diameter != 0 else 0.0
+        ur = ws_val / diameter / natural_frequency * 1000.0 if (diameter * natural_frequency) != 0 else 0.0
+
+        rows.append([
+            file_name, 
+            wind_speed, 
+            float(top_peak), 
+            float(bottom_bottom), 
+            amplitude,
+            a_star,
+            ur
+        ])
 
     write_header = not output_path.exists()
     mode = "a" if output_path.exists() else "w"
@@ -250,9 +288,11 @@ def high_pass_filter(signal: np.ndarray, cutoff_hz: float, sample_rate: float, o
 
 def acceleration_to_displacement(
     acceleration: np.ndarray,
-    sampling_frequency: float,
-    cutoff_frequency_hz: float
+    sampling_frequency: float
 ) -> np.ndarray:
+    # Use a hardcoded cutoff since the parameter was removed from UI/logic
+    cutoff_frequency_hz = 0.5 
+    
     filtered_acc = high_pass_filter(acceleration, cutoff_frequency_hz, sampling_frequency)
     dt = 1.0 / sampling_frequency
     speed = np.cumsum(filtered_acc) * dt
@@ -315,8 +355,9 @@ def analyze_displacement(
 def run_analysis(
     log_file_path: Optional[str],
     sampling_frequency: float,
-    cutoff_frequency_hz: float,
     data_structure: List[int],
+    diameter: float = DEFAULT_DIAMETER,
+    natural_frequency: float = DEFAULT_NATURAL_FREQUENCY,
 ) -> Iterator[str]:
     """
     Main analysis workflow. Finds and processes data based on a log file.
@@ -354,7 +395,8 @@ def run_analysis(
                 displacement_series.append(("disp", col_num, disp))
             for col_num, acc in acc_cols:
                 yield f"  - Converting acceleration to displacement for column {col_num}..."
-                disp_from_acc = acceleration_to_displacement(acc, sampling_frequency, cutoff_frequency_hz)
+                # Updated call: no cutoff_frequency_hz passed
+                disp_from_acc = acceleration_to_displacement(acc, sampling_frequency)
                 displacement_series.append(("acce", col_num, disp_from_acc))
 
             if not displacement_series:
@@ -380,7 +422,8 @@ def run_analysis(
             yield f"  - Exporting results for '{file_key}'..."
             for (kind, col_num), results in column_results.items():
                 output_filename = f"output_{file_key}_{kind}_{col_num}.csv"
-                export_result_to_csv(results, file_key, output_filename)
+                # Pass diameter and natural_frequency to export
+                export_result_to_csv(results, file_key, output_filename, diameter, natural_frequency)
                 yield f"    - Saved results to {output_filename}"
 
         except (FileNotFoundError, ValueError, IndexError) as e:
@@ -388,4 +431,3 @@ def run_analysis(
             continue
     
     yield "Analysis complete."
-
