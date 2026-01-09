@@ -319,7 +319,7 @@ class MainWindow(QMainWindow):
         self.data_structure_input = QLineEdit(', '.join(map(str, logic.DEFAULT_DATA_STRUCTURE)))
 
         settings_layout.addRow(QLabel("Sampling Freq (Hz):"), self.sampling_freq_input)
-        settings_layout.addRow(QLabel("Diameter:"), self.diameter_input)
+        settings_layout.addRow(QLabel("Diameter (mm):"), self.diameter_input)
         settings_layout.addRow(QLabel("Natural Freq (Hz):"), self.natural_freq_input)
         settings_layout.addRow(QLabel("Data Structure:"), self.data_structure_input)
         
