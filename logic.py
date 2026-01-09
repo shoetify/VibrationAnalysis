@@ -20,7 +20,7 @@ except ImportError:
 DEFAULT_SAMPLING_FREQUENCY = 333.3333
 # DEFAULT_CUTOFF_FREQUENCY_HZ was removed per user request. 
 # A hardcoded value (e.g. 0.5) is used internally where filtering is strictly required.
-DEFAULT_DATA_STRUCTURE = [1, 2, 3, 3, 3, 0, 0, 0, 0]
+DEFAULT_DATA_STRUCTURE = [1, 2]
 DEFAULT_DIAMETER = 60
 DEFAULT_NATURAL_FREQUENCY = 8
 
