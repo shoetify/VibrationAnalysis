@@ -12,9 +12,22 @@ from PySide6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent
 
 import logic
 
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
 # --- Constants for UI ---
 APP_TITLE = "Vibration Analysis Tool"
-WINDOW_ICON_PATH = "LOGO.png"
+#WINDOW_ICON_PATH = "assets/LOGO.png"
 DEFAULT_WINDOW_SIZE = (1000, 700) # Wider for sidebar
 
 # --- QSS Dark Theme (Fluent/Material Inspired) ---
@@ -236,8 +249,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
-        if Path(WINDOW_ICON_PATH).exists():
-            self.setWindowIcon(QIcon(WINDOW_ICON_PATH))
+        logo_path = resource_path("assets/logo.png")
+        icon_path = resource_path("assets/icon.ico")
+        if Path(icon_path).exists():
+            self.setWindowIcon(QIcon(icon_path))
         self.resize(*DEFAULT_WINDOW_SIZE)
 
         # State
@@ -262,7 +277,7 @@ class MainWindow(QMainWindow):
 
         # Branding
         self.logo_label = QLabel()
-        pixmap = QPixmap(WINDOW_ICON_PATH)
+        pixmap = QPixmap(logo_path)
         if not pixmap.isNull():
             self.logo_label.setPixmap(pixmap.scaledToHeight(80, Qt.SmoothTransformation))
         self.logo_label.setAlignment(Qt.AlignCenter)
